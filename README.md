@@ -28,7 +28,7 @@
 
 -->
 
-Terraform module to manage [AWS Service Quotas](https://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html).
+Terraform module to manage [AWS Service Quotas](https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html).
 
 ---
 
@@ -98,6 +98,8 @@ For a complete example, see [examples/complete](examples/complete).
 For automated tests of the complete example using [bats](https://github.com/bats-core/bats-core) and [Terratest](https://github.com/gruntwork-io/terratest)
 (which tests and deploys the example on AWS), see [test](test).
 
+`NOTE:` Some service quotas can only be managed from specific regions (see [hashicorp/terraform-provider-aws#13075](https://github.com/hashicorp/terraform-provider-aws/issues/13075))
+
 ```hcl
 # Create a standard label resource. See [null-label](https://github.com/cloudposse/terraform-null-label/#terraform-null-label--)
 module "label" {
@@ -109,10 +111,37 @@ module "label" {
   name      = "example"
 }
 
+locals {
+  service_quotas = [
+    {
+      quota_code   = "L-93826ACB" # aka `Routes per route table`
+      service_code = "vpc"
+      value        = 100 # since this is non-null, the module should try to create a service quota for this value
+    },
+    {
+      quota_name   = "Subnets per VPC" # aka `L-44499CD2`
+      service_code = "vpc"
+      value        = 250 # since this is non-null, the module will find the `quota_code` and try to create a service quota for this value
+    },
+    {
+      quota_code   = "L-F678F1CE" # aka `VPC per Region`
+      service_code = "vpc"
+      value        = null # since this is null, the module should try to lookup the value of this service quota, it should be default
+    },
+    {
+      quota_name   = "VPC security groups per Region" # aka `L-E79EC296`
+      service_code = "vpc"
+      value        = null # since this is null, the module should try to lookup the value of this service quota, it should be default
+    }
+  ]
+}
+
 module "service_quotas" {
   source  = "cloudposse/service-quotas/aws"
   # Cloud Posse recommends pinning every module to a specific version
   # version = "x.x.x"
+
+  service_quotas = local.service_quotas
 
   context = module.label.this
 }
@@ -146,13 +175,13 @@ Available targets:
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
-| <a name="requirement_random"></a> [random](#requirement\_random) | >= 2.2 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_random"></a> [random](#provider\_random) | >= 2.2 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | n/a |
 
 ## Modules
 
@@ -164,7 +193,11 @@ Available targets:
 
 | Name | Type |
 |------|------|
-| [random_integer.example](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/integer) | resource |
+| [aws_servicequotas_service_quota.managed_by_code](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/servicequotas_service_quota) | resource |
+| [aws_servicequotas_service_quota.managed_by_name](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/servicequotas_service_quota) | resource |
+| [aws_servicequotas_service_quota.lookup_quota_by_code](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/servicequotas_service_quota) | data source |
+| [aws_servicequotas_service_quota.lookup_quota_by_name](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/servicequotas_service_quota) | data source |
+| [aws_servicequotas_service_quota.managed_by_name](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/servicequotas_service_quota) | data source |
 
 ## Inputs
 
@@ -177,7 +210,6 @@ Available targets:
 | <a name="input_descriptor_formats"></a> [descriptor\_formats](#input\_descriptor\_formats) | Describe additional descriptors to be output in the `descriptors` output map.<br>Map of maps. Keys are names of descriptors. Values are maps of the form<br>`{<br>   format = string<br>   labels = list(string)<br>}`<br>(Type is `any` so the map values can later be enhanced to provide additional options.)<br>`format` is a Terraform format string to be passed to the `format()` function.<br>`labels` is a list of labels, in order, to pass to `format()` function.<br>Label values will be normalized before being passed to `format()` so they will be<br>identical to how they appear in `id`.<br>Default is `{}` (`descriptors` output will be empty). | `any` | `{}` | no |
 | <a name="input_enabled"></a> [enabled](#input\_enabled) | Set to false to prevent the module from creating any resources | `bool` | `null` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | ID element. Usually used for region e.g. 'uw2', 'us-west-2', OR role 'prod', 'staging', 'dev', 'UAT' | `string` | `null` | no |
-| <a name="input_example"></a> [example](#input\_example) | Example variable | `string` | `"hello world"` | no |
 | <a name="input_id_length_limit"></a> [id\_length\_limit](#input\_id\_length\_limit) | Limit `id` to this many characters (minimum 6).<br>Set to `0` for unlimited length.<br>Set to `null` for keep the existing setting, which defaults to `0`.<br>Does not affect `id_full`. | `number` | `null` | no |
 | <a name="input_label_key_case"></a> [label\_key\_case](#input\_label\_key\_case) | Controls the letter case of the `tags` keys (label names) for tags generated by this module.<br>Does not affect keys of tags passed in via the `tags` input.<br>Possible values: `lower`, `title`, `upper`.<br>Default value: `title`. | `string` | `null` | no |
 | <a name="input_label_order"></a> [label\_order](#input\_label\_order) | The order in which the labels (ID elements) appear in the `id`.<br>Defaults to ["namespace", "environment", "stage", "name", "attributes"].<br>You can omit any of the 6 labels ("tenant" is the 6th), but at least one must be present. | `list(string)` | `null` | no |
@@ -186,6 +218,7 @@ Available targets:
 | <a name="input_name"></a> [name](#input\_name) | ID element. Usually the component or solution name, e.g. 'app' or 'jenkins'.<br>This is the only ID element not also included as a `tag`.<br>The "name" tag is set to the full `id` string. There is no tag with the value of the `name` input. | `string` | `null` | no |
 | <a name="input_namespace"></a> [namespace](#input\_namespace) | ID element. Usually an abbreviation of your organization name, e.g. 'eg' or 'cp', to help ensure generated IDs are globally unique | `string` | `null` | no |
 | <a name="input_regex_replace_chars"></a> [regex\_replace\_chars](#input\_regex\_replace\_chars) | Terraform regular expression (regex) string.<br>Characters matching the regex will be removed from the ID elements.<br>If not set, `"/[^a-zA-Z0-9-]/"` is used to remove all characters other than hyphens, letters and digits. | `string` | `null` | no |
+| <a name="input_service_quotas"></a> [service\_quotas](#input\_service\_quotas) | A list of service quotas to manage or lookup.<br>To lookup the value of a service quota, set `value = null` and either `quota_code` or `quota_name`.<br>To manage a service quota, set `value` to a number. Service Quotas can only be managed via `quota_code`. | `any` | `[]` | no |
 | <a name="input_stage"></a> [stage](#input\_stage) | ID element. Usually used to indicate role, e.g. 'prod', 'staging', 'source', 'build', 'test', 'deploy', 'release' | `string` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Additional tags (e.g. `{'BusinessUnit': 'XYZ'}`).<br>Neither the tag keys nor the tag values will be modified by this module. | `map(string)` | `{}` | no |
 | <a name="input_tenant"></a> [tenant](#input\_tenant) | ID element \_(Rarely used, not included by default)\_. A customer identifier, indicating who this instance of a resource is for | `string` | `null` | no |
@@ -194,9 +227,7 @@ Available targets:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_example"></a> [example](#output\_example) | Example output |
-| <a name="output_id"></a> [id](#output\_id) | ID of the created example |
-| <a name="output_random"></a> [random](#output\_random) | Stable random number for this example |
+| <a name="output_service_quotas"></a> [service\_quotas](#output\_service\_quotas) | List of service quotas that are being managed by this module |
 <!-- markdownlint-restore -->
 
 
@@ -221,6 +252,7 @@ Check out these related projects.
 For additional context, refer to some of these links.
 
 - [AWS Service Quota Reference](https://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html) - AWS's general reference for service quotas.
+- [AWS Service Quotas User Guide](https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html) - AWS's user guide for service quotas.
 - [Terraform Standard Module Structure](https://www.terraform.io/docs/modules/index.html#standard-module-structure) - HashiCorp's standard module structure is a file and directory layout we recommend for reusable modules distributed in separate repositories.
 - [Terraform Module Requirements](https://www.terraform.io/docs/registry/modules/publish.html#requirements) - HashiCorp's guidance on all the requirements for publishing a module. Meeting the requirements for publishing a module is extremely easy.
 - [Terraform `random_integer` Resource](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/integer) - The resource random_integer generates random values from a given range, described by the min and max attributes of a given resource.
