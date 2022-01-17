@@ -1,7 +1,7 @@
-module "example_service_quotas" {
+module "service_quotas" {
   source = "../../"
 
-  context = module.this.context
-
   service_quotas = var.service_quotas
+
+  context = module.this.context
 }

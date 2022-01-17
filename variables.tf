@@ -1,6 +1,6 @@
 # TODO: use `optional` when it becomes GA
 variable "service_quotas" {
-  type        = any
+  type        = list(any)
   description = <<-EOF
   A list of service quotas to manage or lookup.
   To lookup the value of a service quota, set `value = null` and either `quota_code` or `quota_name`.

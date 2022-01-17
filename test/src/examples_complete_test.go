@@ -84,3 +84,8 @@ func TestExamplesComplete(t *testing.T) {
 		}
 	}
 }
+
+// Test the Terraform module in examples/complete doesn't attempt to create resources with enabled=false
+func TestExamplesAccountSettingsDisabled(t *testing.T) {
+	testNoChanges(t, "../../examples/complete")
+}

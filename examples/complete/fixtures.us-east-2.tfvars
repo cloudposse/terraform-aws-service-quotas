@@ -6,7 +6,7 @@ environment = "ue2"
 
 stage = "test"
 
-name = "example"
+name = "service-quotas"
 
 service_quotas = [
   {
