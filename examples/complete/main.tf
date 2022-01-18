@@ -1,7 +1,7 @@
-module "example" {
-  source = "../.."
+module "service_quotas" {
+  source = "../../"
 
-  example = var.example
+  service_quotas = var.service_quotas
 
   context = module.this.context
 }

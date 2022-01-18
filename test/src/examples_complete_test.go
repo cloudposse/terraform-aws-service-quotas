@@ -1,19 +1,48 @@
 package test
 
 import (
-  "github.com/gruntwork-io/terratest/modules/random"
-  "github.com/gruntwork-io/terratest/modules/terraform"
+	"testing"
+
+	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
-  "strings"
-  "testing"
 )
+
+// struct to handle complex output of module
+type ServiceQuota struct {
+	Adjustable   bool    `json:"adjustable"`
+	ARN          string  `json:"arn"`
+	DefaultValue string  `json:"default_value"`
+	GlobalQuota  bool    `json:"global_quota"`
+	ID           string  `json:"id"`
+	ServiceName  string  `json:"service_name"`
+	Value        float64 `json:"value"`
+	QuotaCode    string  `json:"quota_code"`
+	QuotaName    string  `json:"quota_name"`
+	ServiceCode  string  `json:"service_code"`
+}
 
 // Test the Terraform module in examples/complete using Terratest.
 func TestExamplesComplete(t *testing.T) {
-  randID := strings.ToLower(random.UniqueId())
-  attributes := []string{randID}
+	// see https://docs.aws.amazon.com/general/latest/gr/vpc-service.html#vpc-quotas
+	defaultVpcsPerRegion := 50
 
-	exampleInput := "Hello, world!"
+	// see output of `aws service-quotas list-service-quotas --service-code vpc`
+	expectedVpcPerRegionQuotaCode := "L-F678F1CE"
+	expectedVpcRoutesPerTableQuotaCode := "L-93826ACB"
+	expectedVpcSecurityGroupsPerRegionQuotaCode := "L-E79EC296"
+	expectedVpcSubnetsSharedWithAccountCode := "L-44499CD2"
+
+	// these are set in `fixtures.us-east-2.tfvars`
+	expectedVpcRoutesPerTableValue := 100
+	expectedVpcSecurityGroupsPerRegionName := "VPC security groups per Region"
+	expectedVpcSubnetsSharedWithAccountName := "Subnets per VPC"
+	expectedVpcSubnetsSharedWithAccountValue := 250
+
+	// this is defined in `fixtures.us-east-2.tfvars`
+	expectedServiceCode := "vpc"
+
+	// initialize slice for outputs
+	serviceQuotas := []ServiceQuota{}
 
 	terraformOptions := &terraform.Options{
 		// The path to where our Terraform code is located
@@ -21,58 +50,42 @@ func TestExamplesComplete(t *testing.T) {
 		Upgrade:      true,
 		// Variables to pass to our Terraform code using -var-file options
 		VarFiles: []string{"fixtures.us-east-2.tfvars"},
-		// We always include a random attribute so that parallel tests
-		// and AWS resources do not interfere with each other
-		Vars: map[string]interface{}{
-			"attributes": attributes,
-			"example":    exampleInput,
-		},
 	}
+
 	// At the end of the test, run `terraform destroy` to clean up any resources that were created
 	defer terraform.Destroy(t, terraformOptions)
 
 	// This will run `terraform init` and `terraform apply` and fail the test if there are any errors
 	terraform.InitAndApply(t, terraformOptions)
 
-	// Run `terraform output` to get the value of an output variable
-	id := terraform.Output(t, terraformOptions, "id")
-	example := terraform.Output(t, terraformOptions, "example")
-	random := terraform.Output(t, terraformOptions, "random")
+	// Run `terraform output` to get the value of an output of a struct
+	terraform.OutputStruct(t, terraformOptions, "service_quotas", serviceQuotas)
 
-	// Verify we're getting back the outputs we expect
-	// Ensure we get a random number appended
-	assert.Equal(t, exampleInput+" "+random, example)
-	// Ensure we get the attribute included in the ID
-	assert.Equal(t, "eg-ue2-test-example-"+randID, id)
+	// verify outputs
+	for _, quota := range serviceQuotas {
+		// all quotas should be for `vpc`
+		assert.Equal(t, expectedServiceCode, quota.ServiceCode)
 
-	// ************************************************************************
-	// This steps below are unusual, not generally part of the testing
-	// but included here as an example of testing this specific module.
-	// This module has a random number that is supposed to change
-	// only when the example changes. So we run it again to ensure
-	// it does not change.
+		switch quota.QuotaCode {
+		case expectedVpcRoutesPerTableQuotaCode:
+			assert.Equal(t, expectedVpcRoutesPerTableQuotaCode, quota.QuotaCode)
+			assert.Equal(t, expectedVpcRoutesPerTableValue, quota.Value)
+		case expectedVpcPerRegionQuotaCode:
+			assert.Equal(t, expectedVpcRoutesPerTableQuotaCode, quota.QuotaCode)
+			assert.Equal(t, expectedVpcRoutesPerTableValue, quota.Value)
+		case expectedVpcPerRegionQuotaCode:
+			assert.Equal(t, defaultVpcsPerRegion, quota.Value)
+		case expectedVpcSecurityGroupsPerRegionQuotaCode:
+			assert.Equal(t, expectedVpcSecurityGroupsPerRegionName, quota.QuotaName)
 
-	// This will run `terraform apply` a second time and fail the test if there are any errors
-	terraform.Apply(t, terraformOptions)
+		case expectedVpcSubnetsSharedWithAccountCode:
+			assert.Equal(t, expectedVpcSubnetsSharedWithAccountName, quota.QuotaName)
+			assert.Equal(t, expectedVpcSubnetsSharedWithAccountValue, quota.Value)
+		}
+	}
+}
 
-	id2 := terraform.Output(t, terraformOptions, "id")
-	example2 := terraform.Output(t, terraformOptions, "example")
-	random2 := terraform.Output(t, terraformOptions, "random")
-
-	assert.Equal(t, id, id2, "Expected `id` to be stable")
-	assert.Equal(t, example, example2, "Expected `example` to be stable")
-	assert.Equal(t, random, random2, "Expected `random` to be stable")
-
-	// Then we run change the example and run it a third time and
-	// verify that the random number changed
-	newExample := "Goodbye"
-	terraformOptions.Vars["example"] = newExample
-	terraform.Apply(t, terraformOptions)
-
-	example3 := terraform.Output(t, terraformOptions, "example")
-	random3 := terraform.Output(t, terraformOptions, "random")
-
-	assert.NotEqual(t, random, random3, "Expected `random` to change when `example` changed")
-	assert.Equal(t, newExample+" "+random3, example3, "Expected `example` to use new random number")
-
+// Test the Terraform module in examples/complete doesn't attempt to create resources with enabled=false
+func TestExamplesCompleteDisabled(t *testing.T) {
+	testNoChanges(t, "../../examples/complete")
 }

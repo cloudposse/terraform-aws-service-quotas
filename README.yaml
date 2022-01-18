@@ -45,6 +45,9 @@ references:
   - name: AWS Service Quota Reference
     description: "AWS's general reference for service quotas."
     url: "https://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html"
+  - name: AWS Service Quotas User Guide
+    description: "AWS's user guide for service quotas."
+    url: "https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html"
   - name: "Terraform Standard Module Structure"
     description: "HashiCorp's standard module structure is a file and directory layout we recommend for reusable modules distributed in separate repositories."
     url: "https://www.terraform.io/docs/modules/index.html#standard-module-structure"
@@ -60,7 +63,7 @@ references:
 
 # Short description of this project
 description: |-
-  Terraform module to manage [AWS Service Quotas](https://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html).
+  Terraform module to manage [AWS Service Quotas](https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html).
 
 # Introduction to the project
 # introduction: |-
@@ -73,6 +76,8 @@ usage: |-
   For automated tests of the complete example using [bats](https://github.com/bats-core/bats-core) and [Terratest](https://github.com/gruntwork-io/terratest)
   (which tests and deploys the example on AWS), see [test](test).
 
+  `NOTE:` Some service quotas can only be managed from specific regions (see [hashicorp/terraform-provider-aws#13075](https://github.com/hashicorp/terraform-provider-aws/issues/13075))
+
   ```hcl
   # Create a standard label resource. See [null-label](https://github.com/cloudposse/terraform-null-label/#terraform-null-label--)
   module "label" {
@@ -84,10 +89,37 @@ usage: |-
     name      = "example"
   }
 
+  locals {
+    service_quotas = [
+      {
+        quota_code   = "L-93826ACB" # aka `Routes per route table`
+        service_code = "vpc"
+        value        = 100 # since this is non-null, the module should try to create a service quota for this value
+      },
+      {
+        quota_name   = "Subnets per VPC" # aka `L-44499CD2`
+        service_code = "vpc"
+        value        = 250 # since this is non-null, the module will find the `quota_code` and try to create a service quota for this value
+      },
+      {
+        quota_code   = "L-F678F1CE" # aka `VPC per Region`
+        service_code = "vpc"
+        value        = null # since this is null, the module should try to lookup the value of this service quota, it should be default
+      },
+      {
+        quota_name   = "VPC security groups per Region" # aka `L-E79EC296`
+        service_code = "vpc"
+        value        = null # since this is null, the module should try to lookup the value of this service quota, it should be default
+      }
+    ]
+  }
+
   module "service_quotas" {
     source  = "cloudposse/service-quotas/aws"
     # Cloud Posse recommends pinning every module to a specific version
     # version = "x.x.x"
+
+    service_quotas = local.service_quotas
 
     context = module.label.this
   }
