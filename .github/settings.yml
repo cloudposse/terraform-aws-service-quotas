@@ -5,3 +5,4 @@ repository:
   description: Terraform module to manage AWS Service Quotas
   homepage: https://cloudposse.com/accelerate
   topics: ""
+
