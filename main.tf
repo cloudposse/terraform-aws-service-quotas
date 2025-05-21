@@ -3,8 +3,8 @@ locals {
 
   # manage quotas that have a `value` defined
   quotas_to_manage         = { for i, quota in var.service_quotas : i => quota if local.enabled && lookup(quota, "value", null) != null }
-  quotas_to_manage_by_code = { for i, quota in local.quotas_to_manage : i => quota if local.enabled && lookup(quota, "quota_code", null) != null }
-  quotas_to_manage_by_name = { for i, quota in local.quotas_to_manage : i => quota if local.enabled && lookup(quota, "quota_name", null) != null }
+  quotas_to_manage_by_code = { for i, quota in local.quotas_to_manage : "${quota.service_code}:${quota.quota_code}" => quota if local.enabled && lookup(quota, "quota_code", null) != null }
+  quotas_to_manage_by_name = { for i, quota in local.quotas_to_manage : "${quota.service_code}:${quota.quota_name}" => quota if local.enabled && lookup(quota, "quota_name", null) != null }
 
   # lookup quotas that have a `quota_code` or `quota_name` defined and `value` is null
   quotas_to_lookup         = { for i, quota in var.service_quotas : i => quota if local.enabled && lookup(quota, "value", null) == null }
